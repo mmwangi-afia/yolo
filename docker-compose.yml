@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:5.0
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - yolo-network
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      - mongo
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+      - PORT=${PORT:-5000}
+    ports:
+      - "5000:5000"
+    networks:
+      - yolo-network
+
+  client:
+    build:
+      context: ./client
+    ports:
+      - "3000:80"
+    networks:
+      - yolo-network
+
+volumes:
+  mongo-data:
+
+networks:
+  yolo-network:
+    driver: bridge
