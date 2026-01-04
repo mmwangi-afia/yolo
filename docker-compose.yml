@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   mongo:
     image: mongo:5.0
@@ -8,8 +7,8 @@ services:
       - mongo-data:/data/db
     networks:
       - yolo-network
-
   backend:
+    image: muthoni880/yolo-backend:1.0.0
     build:
       context: ./backend
     depends_on:
@@ -25,8 +24,11 @@ services:
       - yolo-network
 
   client:
+    image: muthoni880/yolo-client:1.0.0
     build:
       context: ./client
+    depends_on:
+      - backend
     ports:
       - "3000:80"
     networks:
