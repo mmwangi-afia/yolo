@@ -48,6 +48,7 @@ This document provides a comprehensive explanation of the containerization imple
 - Use a named volume for MongoDB:
   - `volumes: - mongo-data:/data/db`
 - This ensures data persists across container restarts.
+- MongoDB persistence was tested by adding products, stopping and restarting containers, and confirming the data remained available. The project was pushed to GitHub and successfully run from a fresh clone using docker-compose.
 
 ## 5. Git workflow
 - Branching: create feature branches from `master` (e.g., `feature/dockerize`).
@@ -63,7 +64,7 @@ This document provides a comprehensive explanation of the containerization imple
 - Node version issues: check `engines` in `client/package.json` and adjust base image accordingly.
 
 ## 7. Image tagging & release practices
-- Always use explicit tags (avoid `latest`), e.g., `rmwangi3/yolo-backend:1.0.0`.
+- Always use explicit tags (avoid `latest`), e.g., `muthoni880/yolo-backend:1.0.0`.
 - For CI/CD, use semantic versioning and include build metadata (or image digests) for traceability.
 
 ## 8. Security & reliability recommendations (additional)
