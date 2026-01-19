@@ -1,5 +1,5 @@
 ---
-# Global variables for all hosts
+# Global variables
 project_name: yolo
 project_root: /opt/yolo
 app_user: yoloapp
@@ -16,7 +16,7 @@ mongodb_data_dir: /var/lib/mongodb
 mongodb_log_dir: /var/log/mongodb
 mongodb_dbpath: "{{ mongodb_data_dir }}"
 
-# Application configuration
+# App configuration
 node_version: "16.x"
 npm_registry: https://registry.npmjs.org/
 
