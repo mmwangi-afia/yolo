@@ -1,0 +1,7 @@
+---
+# Host-specific variables for ubuntu_vm
+ansible_python_interpreter: /usr/bin/python3
+
+# Override defaults if needed for this specific VM
+mongodb_uri: "mongodb://localhost:27017/yolo_db"
+backend_api_url: "http://localhost:5000"
