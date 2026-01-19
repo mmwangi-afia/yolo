@@ -1,4 +1,5 @@
 ---
+##adding roles and tags
 - name: Deploy YOLO Application Stack
   hosts: vagrant_vm
   become: yes
