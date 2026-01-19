@@ -1,0 +1,3 @@
+---
+mongodb_bind_ip: 127.0.0.1
+mongodb_net_port: "{{ mongodb_port }}"

@@ -1,0 +1,65 @@
+---
+- name: Install and Configure MongoDB
+  block:
+    - name: Import MongoDB GPG key
+      apt_key:
+        url: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
+        state: present
+    
+    - name: Add MongoDB repository
+      apt_repository:
+        repo: "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_version }} multiverse"
+        state: present
+        filename: mongodb-org-{{ mongodb_version }}
+    
+    - name: Install MongoDB packages
+      apt:
+        name:
+          - mongodb-org
+        state: present
+        update_cache: yes
+    
+    - name: Create MongoDB directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: mongodb
+        group: mongodb
+        mode: '0755'
+      loop:
+        - "{{ mongodb_data_dir }}"
+        - "{{ mongodb_log_dir }}"
+    
+    - name: Configure MongoDB
+      template:
+        src: mongod.conf.j2
+        dest: /etc/mongod.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart mongodb
+    
+    - name: Ensure MongoDB is started and enabled
+      systemd:
+        name: mongod
+        state: started
+        enabled: yes
+        daemon_reload: yes
+    
+    - name: Wait for MongoDB to start
+      wait_for:
+        port: "{{ mongodb_port }}"
+        delay: 5
+        timeout: 30
+  rescue:
+    - name: Display MongoDB installation error
+      debug:
+        msg: "Failed to install MongoDB. Check repository availability."
+    
+    - name: Fail the playbook
+      fail:
+        msg: "MongoDB installation failed"
+  tags:
+    - mongodb
+    - install
+    - database

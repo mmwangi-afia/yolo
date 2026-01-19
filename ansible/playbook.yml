@@ -1,0 +1,116 @@
+---
+- name: Deploy YOLO Application Stack
+  hosts: vagrant_vm
+  become: yes
+  
+  vars_files:
+    - group_vars/all.yml
+  
+  pre_tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags:
+        - always
+        - setup
+
+    - name: Install prerequisite packages
+      block:
+        - name: Install common utilities
+          apt:
+            name:
+              - curl
+              - git
+              - wget
+              - gnupg
+              - lsb-release
+              - ca-certificates
+              - software-properties-common
+              - build-essential
+            state: present
+            update_cache: yes
+        
+        - name: Create application group
+          group:
+            name: "{{ app_group }}"
+            state: present
+        
+        - name: Create application user
+          user:
+            name: "{{ app_user }}"
+            group: "{{ app_group }}"
+            create_home: yes
+            shell: /bin/bash
+            state: present
+        
+        - name: Create project directories
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: "{{ app_user }}"
+            group: "{{ app_group }}"
+            mode: '0755'
+          loop:
+            - "{{ project_root }}"
+            - "{{ project_root }}/backend"
+            - "{{ project_root }}/frontend"
+            - "{{ project_root }}/logs"
+      tags:
+        - setup
+        - prerequisites
+
+  roles:
+    - role: docker
+      tags:
+        - docker
+        - infrastructure
+    
+    - role: mongodb
+      tags:
+        - mongodb
+        - database
+        - infrastructure
+    
+    - role: backend
+      tags:
+        - backend
+        - application
+    
+    - role: frontend
+      tags:
+        - frontend
+        - application
+
+  post_tasks:
+    - name: Verify deployment
+      block:
+        - name: Check MongoDB is running
+          systemd:
+            name: mongod
+            state: started
+          register: mongodb_status
+        
+        - name: Check backend service is running
+          systemd:
+            name: yolo-backend
+            state: started
+          register: backend_status
+        
+        - name: Check Nginx is running
+          systemd:
+            name: nginx
+            state: started
+          register: nginx_status
+        
+        - name: Display deployment status
+          debug:
+            msg:
+              - "MongoDB Status: {{ mongodb_status.status.ActiveState }}"
+              - "Backend Status: {{ backend_status.status.ActiveState }}"
+              - "Nginx Status: {{ nginx_status.status.ActiveState }}"
+              - "Frontend URL: http://{{ ansible_host }}:{{ frontend_port }}"
+              - "Backend API URL: http://{{ ansible_host }}:{{ backend_port }}"
+      tags:
+        - verify
+        - always

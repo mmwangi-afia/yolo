@@ -1,0 +1,4 @@
+---
+frontend_app_dir: "{{ project_root }}/frontend"
+frontend_build_dir: "{{ frontend_app_dir }}/build"
+frontend_service_name: nginx

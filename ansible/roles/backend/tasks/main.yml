@@ -1,0 +1,86 @@
+---
+- name: Deploy Backend Application
+  block:
+    - name: Install Node.js repository
+      shell: curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | bash -
+      args:
+        creates: /etc/apt/sources.list.d/nodesource.list
+    
+    - name: Install Node.js and npm
+      apt:
+        name:
+          - nodejs
+        state: present
+        update_cache: yes
+    
+    - name: Copy backend application files
+      synchronize:
+        src: "{{ playbook_dir }}/backend/"
+        dest: "{{ project_root }}/backend/"
+        delete: yes
+        recursive: yes
+      delegate_to: localhost
+    
+    - name: Set ownership of backend files
+      file:
+        path: "{{ project_root }}/backend"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        recurse: yes
+    
+    - name: Install backend dependencies
+      npm:
+        path: "{{ project_root }}/backend"
+        state: present
+      become_user: "{{ app_user }}"
+    
+    - name: Create backend environment file
+      template:
+        src: backend.env.j2
+        dest: "{{ project_root }}/backend/.env"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0600'
+    
+    - name: Create systemd service for backend
+      template:
+        src: backend.service.j2
+        dest: /etc/systemd/system/yolo-backend.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart backend
+    
+    - name: Enable and start backend service
+      systemd:
+        name: yolo-backend
+        state: started
+        enabled: yes
+        daemon_reload: yes
+    
+    - name: Wait for backend to be ready
+      wait_for:
+        port: "{{ backend_port }}"
+        delay: 3
+        timeout: 30
+  rescue:
+    - name: Display backend deployment error
+      debug:
+        msg: "Failed to deploy backend application"
+    
+    - name: Show backend logs
+      command: journalctl -u yolo-backend -n 50 --no-pager
+      register: backend_logs
+      ignore_errors: yes
+    
+    - name: Print backend logs
+      debug:
+        var: backend_logs.stdout_lines
+    
+    - name: Fail the playbook
+      fail:
+        msg: "Backend deployment failed"
+  tags:
+    - backend
+    - deploy
+    

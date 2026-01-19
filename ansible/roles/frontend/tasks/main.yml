@@ -1,0 +1,91 @@
+---
+- name: Deploy Frontend Application
+  block:
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+    
+    - name: Copy frontend application files
+      synchronize:
+        src: "{{ playbook_dir }}/client/"
+        dest: "{{ project_root }}/frontend/"
+        delete: yes
+        recursive: yes
+      delegate_to: localhost
+    
+    - name: Set ownership of frontend files
+      file:
+        path: "{{ project_root }}/frontend"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        recurse: yes
+    
+    - name: Install frontend dependencies
+      npm:
+        path: "{{ project_root }}/frontend"
+        state: present
+      become_user: "{{ app_user }}"
+    
+    - name: Build frontend application
+      command: npm run build
+      args:
+        chdir: "{{ project_root }}/frontend"
+      become_user: "{{ app_user }}"
+      environment:
+        NODE_ENV: production
+    
+    - name: Configure Nginx for frontend
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/sites-available/yolo-frontend
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx
+    
+    - name: Enable Nginx site
+      file:
+        src: /etc/nginx/sites-available/yolo-frontend
+        dest: /etc/nginx/sites-enabled/yolo-frontend
+        state: link
+      notify: restart nginx
+    
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: restart nginx
+    
+    - name: Ensure Nginx is started and enabled
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+    
+    - name: Wait for Nginx to be ready
+      wait_for:
+        port: "{{ frontend_port }}"
+        delay: 2
+        timeout: 30
+  rescue:
+    - name: Display frontend deployment error
+      debug:
+        msg: "Failed to deploy frontend application"
+    
+    - name: Check Nginx configuration
+      command: nginx -t
+      register: nginx_test
+      ignore_errors: yes
+    
+    - name: Print Nginx test results
+      debug:
+        var: nginx_test
+    
+    - name: Fail the playbook
+      fail:
+        msg: "Frontend deployment failed"
+  tags:
+    - frontend
+    - deploy
