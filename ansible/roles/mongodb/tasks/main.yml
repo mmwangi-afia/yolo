@@ -1,66 +1,72 @@
 ##add database role for containerized database
 ---
-- name: Install and Configure MongoDB
+- name: Deploy MongoDB Container
   block:
-    - name: Import MongoDB GPG key
-      apt_key:
-        url: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
-        state: present
-    
-    - name: Add MongoDB repository
-      apt_repository:
-        repo: "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_version }} multiverse"
-        state: present
-        filename: mongodb-org-{{ mongodb_version }}
-    
-    - name: Install MongoDB packages
-      apt:
-        name:
-          - mongodb-org
-        state: present
-        update_cache: yes
-    
-    - name: Create MongoDB directories
+    - name: Create MongoDB data directory
       file:
-        path: "{{ item }}"
+        path: "{{ mongodb_data_dir }}"
         state: directory
-        owner: mongodb
-        group: mongodb
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
         mode: '0755'
-      loop:
-        - "{{ mongodb_data_dir }}"
-        - "{{ mongodb_log_dir }}"
-    
-    - name: Configure MongoDB
-      template:
-        src: mongod.conf.j2
-        dest: /etc/mongod.conf
-        owner: root
-        group: root
-        mode: '0644'
-      notify: restart mongodb
-    
-    - name: Ensure MongoDB is started and enabled
-      systemd:
-        name: mongod
+
+    - name: Create Docker network
+      docker_network:
+        name: yolo-network
+        state: present
+
+    - name: Stop and remove existing MongoDB container
+      docker_container:
+        name: mongo
+        state: absent
+      ignore_errors: yes
+
+    - name: Pull MongoDB Docker image
+      docker_image:
+        name: "mongo:{{ mongodb_version }}"
+        source: pull
+        state: present
+
+    - name: Run MongoDB container
+      docker_container:
+        name: mongo
+        image: "mongo:{{ mongodb_version }}"
         state: started
-        enabled: yes
-        daemon_reload: yes
-    
+        restart_policy: unless-stopped
+        networks:
+          - name: yolo-network
+        published_ports:
+          - "{{ mongodb_port }}:27017"
+        volumes:
+          - "{{ mongodb_data_dir }}:/data/db"
+        env:
+          MONGO_INITDB_DATABASE: "{{ mongodb_database }}"
+
     - name: Wait for MongoDB to start
       wait_for:
         port: "{{ mongodb_port }}"
         delay: 5
         timeout: 30
+
   rescue:
-    - name: Display MongoDB installation error
+    - name: Display MongoDB deployment error
       debug:
-        msg: "Failed to install MongoDB. Check repository availability."
-    
+        msg: "Failed to deploy MongoDB container"
+
+    - name: Show MongoDB container logs
+      command: docker logs mongo
+      register: mongo_logs
+      ignore_errors: yes
+
+    - name: Print MongoDB logs
+      debug:
+        var: mongo_logs.stdout_lines
+
     - name: Fail the playbook
       fail:
-        msg: "MongoDB installation failed"
+        msg: "MongoDB deployment failed"
+
   tags:
     - mongodb
-    - install
     - database
+    - deploy

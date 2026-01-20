@@ -1,8 +1,4 @@
 ---
 backend_app_dir: "{{ project_root }}/backend"
 backend_service_name: yolo-backend
-backend_env_vars:
-  PORT: "{{ backend_port }}"
-  MONGODB_URI: "{{ mongodb_uri }}"
-  NODE_ENV: "{{ app_environment }}"
-  
+backend_container_name: yolo-backend

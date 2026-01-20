@@ -5,6 +5,10 @@ project_root: /opt/yolo
 app_user: yoloapp
 app_group: yoloapp
 
+# GitHub repository configuration
+github_repo: "https://github.com/mmwangi-afia/yolo.git"  # UPDATE THIS with your actual repo
+github_branch:  master
+
 # Network configuration
 backend_port: 5000
 frontend_port: 3000
@@ -12,14 +16,11 @@ mongodb_port: 27017
 
 # MongoDB configuration
 mongodb_version: "5.0"
-mongodb_data_dir: /var/lib/mongodb
-mongodb_log_dir: /var/log/mongodb
-mongodb_dbpath: "{{ mongodb_data_dir }}"
+mongodb_data_dir: /var/lib/mongodb-data
+mongodb_database: yolo_db
+
+# MongoDB URI for Docker containers (using container name for inter-container communication)
+mongodb_uri: "mongodb://mongo:27017/{{ mongodb_database }}"
 
 # App configuration
-node_version: "16.x"
-npm_registry: https://registry.npmjs.org/
-
-# Environment
 app_environment: production
-mongodb_database: yolo_db

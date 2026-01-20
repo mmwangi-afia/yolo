@@ -1,109 +1,84 @@
 ##add frontend role to deploy ui container
 ---
-- name: Deploy Frontend Application
+# Deploy Frontend Application using Docker
+- name: Deploy Frontend Application with Docker
   block:
-    - name: Install Nginx
-      apt:
-        name: nginx
-        state: present
-        update_cache: yes
-    
-    - name: Copy frontend application files
-      copy:
-        src: "{{ playbook_dir }}/../client/"
-        dest: "{{ project_root }}/frontend/"
-        owner: "{{ app_user }}"
-        group: "{{ app_group }}"
-        mode: '0755'
-    
+    - name: Ensure project is cloned (dependency on backend role)
+      stat:
+        path: "{{ project_root }}/client"
+      register: client_dir
+
+    - name: Clone application if not present
+      git:
+        repo: "{{ github_repo }}"
+        dest: "{{ project_root }}"
+        version: "{{ github_branch }}"
+        force: yes
+      become_user: "{{ app_user }}"
+      when: not client_dir.stat.exists
+
     - name: Set ownership of frontend files
       file:
-        path: "{{ project_root }}/frontend"
+        path: "{{ project_root }}/client"
         owner: "{{ app_user }}"
         group: "{{ app_group }}"
         recurse: yes
-    
-    - name: Configure npm for better network handling
-      command: "{{ item }}"
-      become_user: "{{ app_user }}"
-      loop:
-        - npm config set fetch-timeout 300000
-        - npm config set fetch-retries 5
-        - npm config set fetch-retry-mintimeout 20000
-        - npm config set fetch-retry-maxtimeout 120000
+
+    - name: Ensure Docker network exists
+      docker_network:
+        name: yolo-network
+        state: present
+
+    - name: Stop and remove existing frontend container
+      docker_container:
+        name: yolo-client
+        state: absent
       ignore_errors: yes
 
-    - name: Install frontend dependencies
-      command: npm install --verbose
-      args:
-        chdir: "{{ project_root }}/frontend"
-      become_user: "{{ app_user }}"
-      retries: 3
-      delay: 10
-      register: npm_install_frontend
-      until: npm_install_frontend.rc == 0
-    
-    - name: Build frontend application
-      command: npm run build
-      args:
-        chdir: "{{ project_root }}/frontend"
-      become_user: "{{ app_user }}"
-      environment:
-        NODE_ENV: production
-    
-    - name: Configure Nginx for frontend
-      template:
-        src: nginx.conf.j2
-        dest: /etc/nginx/sites-available/yolo-frontend
-        owner: root
-        group: root
-        mode: '0644'
-      notify: restart nginx
-    
-    - name: Enable Nginx site
-      file:
-        src: /etc/nginx/sites-available/yolo-frontend
-        dest: /etc/nginx/sites-enabled/yolo-frontend
-        state: link
-      notify: restart nginx
-    
-    - name: Force Nginx restart
-      meta: flush_handlers
+    - name: Build frontend Docker image
+      docker_image:
+        name: yolo-client
+        build:
+          path: "{{ project_root }}/client"
+        source: build
+        state: present
+        force_source: yes
 
-    - name: Remove default Nginx site
-      file:
-        path: /etc/nginx/sites-enabled/default
-        state: absent
-      notify: restart nginx
-    
-    - name: Restart Nginx to apply configuration
-      systemd:
-        name: nginx
-        state: restarted
-        enabled: yes
+    - name: Run frontend container
+      docker_container:
+        name: yolo-client
+        image: yolo-client
+        state: started
+        restart_policy: unless-stopped
+        networks:
+          - name: yolo-network
+        published_ports:
+          - "{{ frontend_port }}:80"
 
-    - name: Wait for Nginx to be ready
+    - name: Wait for frontend to be ready
       wait_for:
         port: "{{ frontend_port }}"
-        delay: 2
+        delay: 3
         timeout: 30
+
   rescue:
     - name: Display frontend deployment error
       debug:
         msg: "Failed to deploy frontend application"
-    
-    - name: Check Nginx configuration
-      command: nginx -t
-      register: nginx_test
+
+    - name: Show frontend container logs
+      command: docker logs yolo-client
+      register: frontend_logs
       ignore_errors: yes
-    
-    - name: Print Nginx test results
+
+    - name: Print frontend logs
       debug:
-        var: nginx_test
-    
+        var: frontend_logs.stdout_lines
+
     - name: Fail the playbook
       fail:
         msg: "Frontend deployment failed"
+
   tags:
     - frontend
     - deploy

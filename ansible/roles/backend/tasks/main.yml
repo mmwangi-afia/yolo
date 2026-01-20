@@ -1,100 +1,84 @@
 ##add common role for base system configuration
 ---
-- name: Deploy Backend Application
+# Deploy Backend Application using Docker
+- name: Deploy Backend Application with Docker
   block:
-    - name: Install Node.js repository
-      shell: curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | bash -
-      args:
-        creates: /etc/apt/sources.list.d/nodesource.list
-    
-    - name: Install Node.js and npm
-      apt:
-        name:
-          - nodejs
-        state: present
-        update_cache: yes
-    
-    - name: Copy backend application files
-      copy:
-        src: "{{ playbook_dir }}/../backend/"
-        dest: "{{ project_root }}/backend/"
-        owner: "{{ app_user }}"
-        group: "{{ app_group }}"
-        mode: '0755'
-    
-    - name: Set ownership of backend files
+    - name: Clone application from GitHub
+      git:
+        repo: "{{ github_repo }}"
+        dest: "{{ project_root }}"
+        version: "{{ github_branch }}"
+        force: yes
+      become_user: "{{ app_user }}"
+
+    - name: Set ownership of cloned files
       file:
-        path: "{{ project_root }}/backend"
+        path: "{{ project_root }}"
         owner: "{{ app_user }}"
         group: "{{ app_group }}"
         recurse: yes
-    
-    - name: Configure npm for better network handling
-      command: "{{ item }}"
-      become_user: "{{ app_user }}"
-      loop:
-        - npm config set fetch-timeout 300000
-        - npm config set fetch-retries 5
-        - npm config set fetch-retry-mintimeout 20000
-        - npm config set fetch-retry-maxtimeout 120000
+
+    - name: Ensure Docker network exists
+      docker_network:
+        name: yolo-network
+        state: present
+
+    - name: Stop and remove existing backend container
+      docker_container:
+        name: yolo-backend
+        state: absent
       ignore_errors: yes
 
-    - name: Install backend dependencies
-      command: npm install --verbose
-      args:
-        chdir: "{{ project_root }}/backend"
-      become_user: "{{ app_user }}"
-      retries: 3
-      delay: 10
-      register: npm_install
-      until: npm_install.rc == 0
-    
-    - name: Create backend environment file
-      template:
-        src: backend.env.j2
-        dest: "{{ project_root }}/backend/.env"
-        owner: "{{ app_user }}"
-        group: "{{ app_group }}"
-        mode: '0600'
-    
-    - name: Create systemd service for backend
-      template:
-        src: backend.service.j2
-        dest: /etc/systemd/system/yolo-backend.service
-        owner: root
-        group: root
-        mode: '0644'
-      notify: restart backend
-    
-    - name: Enable and start backend service
-      systemd:
+    - name: Build backend Docker image
+      docker_image:
         name: yolo-backend
+        build:
+          path: "{{ project_root }}/backend"
+        source: build
+        state: present
+        force_source: yes
+
+    - name: Run backend container
+      docker_container:
+        name: yolo-backend
+        image: yolo-backend
         state: started
-        enabled: yes
-        daemon_reload: yes
-    
+        restart_policy: unless-stopped
+        networks:
+          - name: yolo-network
+        published_ports:
+          - "{{ backend_port }}:5000"
+        env:
+          MONGODB_URI: "{{ mongodb_uri }}"
+          PORT: "5000"
+          NODE_ENV: "{{ app_environment }}"
+        volumes:
+          - "{{ project_root }}/backend/public/images:/app/public/images"
+
     - name: Wait for backend to be ready
       wait_for:
         port: "{{ backend_port }}"
-        delay: 3
-        timeout: 30
+        delay: 5
+        timeout: 60
+
   rescue:
     - name: Display backend deployment error
       debug:
         msg: "Failed to deploy backend application"
-    
-    - name: Show backend logs
-      command: journalctl -u yolo-backend -n 50 --no-pager
+
+    - name: Show backend container logs
+      command: docker logs yolo-backend
       register: backend_logs
       ignore_errors: yes
-    
+
     - name: Print backend logs
       debug:
         var: backend_logs.stdout_lines
-    
+
     - name: Fail the playbook
       fail:
         msg: "Backend deployment failed"
+
   tags:
     - backend
     - deploy

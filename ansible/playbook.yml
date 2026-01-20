@@ -29,8 +29,16 @@
               - ca-certificates
               - software-properties-common
               - build-essential
+              - python3-pip
             state: present
             update_cache: yes
+        
+        - name: Install Docker SDK for Python
+          pip:
+            name:
+              - docker
+              - docker-compose
+            state: present
         
         - name: Create application group
           group:
@@ -54,9 +62,8 @@
             mode: '0755'
           loop:
             - "{{ project_root }}"
-            - "{{ project_root }}/backend"
-            - "{{ project_root }}/frontend"
             - "{{ project_root }}/logs"
+            - "{{ mongodb_data_dir }}"
       tags:
         - setup
         - prerequisites
@@ -86,32 +93,59 @@
   post_tasks:
     - name: Verify deployment
       block:
-        - name: Check MongoDB is running
-          systemd:
-            name: mongod
-            state: started
+        - name: Check MongoDB container is running
+          docker_container_info:
+            name: mongo
           register: mongodb_status
         
-        - name: Check backend service is running
-          systemd:
+        - name: Check backend container is running
+          docker_container_info:
             name: yolo-backend
-            state: started
           register: backend_status
         
-        - name: Check Nginx is running
-          systemd:
-            name: nginx
-            state: started
-          register: nginx_status
+        - name: Check frontend container is running
+          docker_container_info:
+            name: yolo-client
+          register: frontend_status
+        
+        - name: Verify MongoDB is healthy
+          fail:
+            msg: "MongoDB container is not running"
+          when: not mongodb_status.exists or mongodb_status.container.State.Status != "running"
+        
+        - name: Verify backend is healthy
+          fail:
+            msg: "Backend container is not running"
+          when: not backend_status.exists or backend_status.container.State.Status != "running"
+        
+        - name: Verify frontend is healthy
+          fail:
+            msg: "Frontend container is not running"
+          when: not frontend_status.exists or frontend_status.container.State.Status != "running"
         
         - name: Display deployment status
           debug:
             msg:
-              - "MongoDB Status: {{ mongodb_status.status.ActiveState }}"
-              - "Backend Status: {{ backend_status.status.ActiveState }}"
-              - "Nginx Status: {{ nginx_status.status.ActiveState }}"
-              - "Frontend URL: http://{{ ansible_host }}:{{ frontend_port }}"
-              - "Backend API URL: http://{{ ansible_host }}:{{ backend_port }}"
+              - "✅ MongoDB Container: {{ mongodb_status.container.State.Status }}"
+              - "✅ Backend Container: {{ backend_status.container.State.Status }}"
+              - "✅ Frontend Container: {{ frontend_status.container.State.Status }}"
+              - "🌐 Frontend URL: http://{{ ansible_host }}:{{ frontend_port }}"
+              - "🔌 Backend API URL: http://{{ ansible_host }}:{{ backend_port }}"
+              - "🗄️  MongoDB URL: mongodb://{{ ansible_host }}:{{ mongodb_port }}"
+      
+      rescue:
+        - name: Display verification error
+          debug:
+            msg: "Deployment verification failed. Check container logs."
+        
+        - name: Show running containers
+          command: docker ps -a
+          register: containers
+        
+        - name: Print container status
+          debug:
+            var: containers.stdout_lines
+      
       tags:
         - verify
         - always
