@@ -29,11 +29,25 @@
         group: "{{ app_group }}"
         recurse: yes
     
-    - name: Install backend dependencies
-      npm:
-        path: "{{ project_root }}/backend"
-        state: present
+    - name: Configure npm for better network handling
+      command: "{{ item }}"
       become_user: "{{ app_user }}"
+      loop:
+        - npm config set fetch-timeout 300000
+        - npm config set fetch-retries 5
+        - npm config set fetch-retry-mintimeout 20000
+        - npm config set fetch-retry-maxtimeout 120000
+      ignore_errors: yes
+
+    - name: Install backend dependencies
+      command: npm install --verbose
+      args:
+        chdir: "{{ project_root }}/backend"
+      become_user: "{{ app_user }}"
+      retries: 3
+      delay: 10
+      register: npm_install
+      until: npm_install.rc == 0
     
     - name: Create backend environment file
       template:
