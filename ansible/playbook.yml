@@ -1,5 +1,5 @@
 ---
-##adding roles and tags
+##adding main ansible playbook with roles and tags
 - name: Deploy YOLO Application Stack
   hosts: vagrant_vm
   become: yes
