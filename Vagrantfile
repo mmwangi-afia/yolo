@@ -4,13 +4,20 @@ Vagrant.configure("2") do |config|
 
   # Configure VM resources
   config.vm.provider "virtualbox" do |vb|
-    vb.memory = "1024"
-    vb.cpus = 1
+    vb.memory = "2048"
+    vb.cpus = 2
   end
 
-  # Forward SSH so Ansible can connect
-  config.vm.network "private_network", type: "dhcp"
+  # Keep both networking options
+  config.vm.network "private_network", ip: "192.168.56.10"
+  config.vm.network "forwarded_port", guest: 22, host: 2222, host_ip: "0.0.0.0"
+  config.vm.network "forwarded_port", guest: 3000, host: 3000, host_ip: "0.0.0.0"
+  config.vm.network "forwarded_port", guest: 5000, host: 5000, host_ip: "0.0.0.0"
+  config.vm.network "forwarded_port", guest: 27017, host: 27017, host_ip: "0.0.0.0"
 
-  # Disable synced folder for simplicity (optional)
-  # config.vm.synced_folder ".", "/vagrant", disabled: true
+  # Ensure vagrant user has passwordless sudo
+  config.vm.provision "shell", inline: <<-SHELL
+    echo "vagrant ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/vagrant
+    chmod 0440 /etc/sudoers.d/vagrant
+  SHELL
 end
