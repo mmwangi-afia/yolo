@@ -9,12 +9,12 @@
         update_cache: yes
     
     - name: Copy frontend application files
-      synchronize:
-        src: "{{ playbook_dir }}/client/"
+      copy:
+        src: "{{ playbook_dir }}/../client/"
         dest: "{{ project_root }}/frontend/"
-        delete: yes
-        recursive: yes
-      delegate_to: localhost
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
     
     - name: Set ownership of frontend files
       file:
@@ -23,11 +23,25 @@
         group: "{{ app_group }}"
         recurse: yes
     
-    - name: Install frontend dependencies
-      npm:
-        path: "{{ project_root }}/frontend"
-        state: present
+    - name: Configure npm for better network handling
+      command: "{{ item }}"
       become_user: "{{ app_user }}"
+      loop:
+        - npm config set fetch-timeout 300000
+        - npm config set fetch-retries 5
+        - npm config set fetch-retry-mintimeout 20000
+        - npm config set fetch-retry-maxtimeout 120000
+      ignore_errors: yes
+
+    - name: Install frontend dependencies
+      command: npm install --verbose
+      args:
+        chdir: "{{ project_root }}/frontend"
+      become_user: "{{ app_user }}"
+      retries: 3
+      delay: 10
+      register: npm_install_frontend
+      until: npm_install_frontend.rc == 0
     
     - name: Build frontend application
       command: npm run build
@@ -53,18 +67,21 @@
         state: link
       notify: restart nginx
     
+    - name: Force Nginx restart
+      meta: flush_handlers
+
     - name: Remove default Nginx site
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent
       notify: restart nginx
     
-    - name: Ensure Nginx is started and enabled
+    - name: Restart Nginx to apply configuration
       systemd:
         name: nginx
-        state: started
+        state: restarted
         enabled: yes
-    
+
     - name: Wait for Nginx to be ready
       wait_for:
         port: "{{ frontend_port }}"
