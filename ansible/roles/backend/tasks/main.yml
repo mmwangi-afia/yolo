@@ -1,3 +1,4 @@
+##add common role for base system configuration
 ---
 - name: Deploy Backend Application
   block:
