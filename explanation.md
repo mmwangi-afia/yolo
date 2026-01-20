@@ -81,3 +81,99 @@ This document provides a comprehensive explanation of the containerization imple
 - After pushing images, include screenshots on the repository or docs showing the repositories and tags, e.g.:
   - ![DockerHub backend 1.0.0](docs/dockerhub-backend.png)
   - ![DockerHub client 1.0.0](docs/dockerhub-client.png)
+
+# Explanation
+
+This document explains the structure and reasoning behind the order of execution in my Ansible playbook for deploying the e-commerce application.
+
+## Playbook Execution Order
+
+The playbook runs roles in the following order:
+
+```
+pre_tasks → docker → clone_repo → mongodb → backend → client → post_tasks
+```
+
+## Why the Order Matters
+
+Each role is dependent on the previous one. Changing the order would break the deployment:
+
+- Docker must be installed before any containers can run.
+- The repository must be cloned before building Docker images.
+- MongoDB must be running before the backend can connect to it.
+- The backend must be running before the frontend can communicate with it.
+
+## Role Functions and Positioning
+
+### 1. Pre-tasks
+- Updates apt and installs essential packages (git, curl, python3-pip).
+- **Modules**: `apt`
+- **Tags**: setup
+
+### 2. Docker Role
+- Installs Docker Engine and Docker Compose.
+- Starts Docker daemon.
+- Installs Python Docker library for Ansible.
+- **Modules**: `apt_key`, `apt_repository`, `apt`, `service`, `user`, `get_url`, `pip`, `docker_container`
+- **Tags**: docker, setup
+
+### 3. Clone Repo Role
+- Creates the project directory.
+- Clones the application code from GitHub.
+- Sets up environment files and image folders.
+- **Modules**: `file`, `git`, `copy`, `debug`
+- **Tags**: clone, setup
+
+### 4. MongoDB Role
+- Creates Docker network for inter-container communication.
+- Creates a persistent volume for MongoDB data.
+- Pulls and runs the MongoDB container.
+- Waits for MongoDB to be ready.
+- **Modules**: `docker_network`, `docker_volume`, `docker_image`, `docker_container`, `wait_for`, `docker_container_info`, `debug`
+- **Tags**: mongodb, containers
+
+### 5. Backend Role
+- Builds the backend Docker image using the Dockerfile.
+- Removes any existing backend container.
+- Runs the backend container, connects it to the network, sets environment variables, and mounts the images volume.
+- Waits for the backend to be ready.
+- **Modules**: `docker_image`, `docker_container`, `wait_for`
+- **Tags**: backend, containers
+
+### 6. Client Role
+- Builds the frontend Docker image.
+- Removes any existing client container.
+- Runs the client container (nginx), connects it to the network, and waits for it to be ready.
+- **Modules**: `docker_image`, `docker_container`, `wait_for`
+- **Tags**: client, containers
+
+### 7. Post-tasks
+- Displays URLs for accessing the application.
+- **Modules**: `debug`
+
+## Variables
+
+Configuration variables are stored in variable files (e.g., `group_vars/all.yml`, `host_vars/ubuntu_vm.yml`). This makes it easy to change settings like ports or environment variables in one place.
+
+## Blocks and Tags
+
+- **Blocks**: Used to group related tasks, such as all Docker installation steps.
+- **Tags**: Allow running or skipping specific parts of the playbook for testing or troubleshooting (e.g., `--tags backend`, `--skip-tags mongodb`).
+
+## Testing
+
+To verify the deployment:
+1. Run `vagrant up`
+2. Access the frontend at http://localhost:3000
+3. Add a product using the form
+4. Restart the VM with `vagrant reload` and confirm data persistence
+
+## Summary
+
+The order of roles ensures all dependencies are met:
+- Docker is required for containers.
+- The code must be present to build images.
+- MongoDB must be running before backend starts.
+- Backend must be running before frontend starts.
+
+This structure guarantees a reliable and repeatable deployment process.
