@@ -15,12 +15,12 @@
         update_cache: yes
     
     - name: Copy backend application files
-      synchronize:
-        src: "{{ playbook_dir }}/backend/"
+      copy:
+        src: "{{ playbook_dir }}/../backend/"
         dest: "{{ project_root }}/backend/"
-        delete: yes
-        recursive: yes
-      delegate_to: localhost
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
     
     - name: Set ownership of backend files
       file:
@@ -84,4 +84,3 @@
   tags:
     - backend
     - deploy
-    
