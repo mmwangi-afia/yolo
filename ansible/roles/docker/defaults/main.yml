@@ -1,3 +1,4 @@
+##configure docker using ansible role
 ---
 docker_edition: ce
 docker_package: "docker-{{ docker_edition }}"
