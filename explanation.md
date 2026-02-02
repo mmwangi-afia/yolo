@@ -177,3 +177,144 @@ The order of roles ensures all dependencies are met:
 - Backend must be running before frontend starts.
 
 This structure guarantees a reliable and repeatable deployment process.
+
+---
+
+# IP4 ORCHESTATAION 
+
+## Overview
+This document explains the Kubernetes implementation for deploying the YOLO e-commerce platform on Google Kubernetes Engine (GKE), including architectural decisions and rationale for object choices.
+
+---
+
+## 1. Choice of Kubernetes Objects
+
+### MongoDB - StatefulSet with Persistent Storage
+**Rationale:**
+- **StatefulSet** was chosen over Deployment because databases require:
+  - **Stable, unique network identifiers**: Each pod gets a predictable name (`mongodb-0`, `mongodb-1`, etc.)
+  - **Stable persistent storage**: Each pod maintains its own PersistentVolumeClaim that persists across pod rescheduling
+  - **Ordered deployment and scaling**: Pods are created sequentially, ensuring data consistency
+  - **Headless service**: Provides direct DNS entries for each pod (`mongodb-0.mongodb-service`)
+
+- **PersistentVolumeClaim (via volumeClaimTemplates)**:
+  - Automatically provisions a persistent disk for each StatefulSet pod
+  - Uses GKE's `standard-rwo` storage class (Google Persistent Disk)
+  - Ensures data persists even if pods are deleted or rescheduled
+  - 5Gi storage allocated for database files
+
+**Why not Deployment?**
+- Deployments treat pods as interchangeable and don't guarantee stable storage
+- Pod names are random, making DNS-based discovery unreliable for databases
+- Data loss risk during pod rescheduling without stable PVC binding
+
+### Backend - Deployment
+**Rationale:**
+- **Deployment** is ideal for stateless applications
+- Backend API servers don't store data locally (state is in MongoDB)
+- Enables easy horizontal scaling with multiple replicas (2 replicas for high availability)
+- Rolling updates ensure zero-downtime deployments
+- Self-healing: automatically replaces failed pods
+
+**Service Type: ClusterIP**
+- Backend only needs internal cluster communication
+- Frontend and other services access it via `backend-service:5000`
+- Not exposed to the internet directly (security best practice)
+
+### Frontend - Deployment
+**Rationale:**
+- **Deployment** for stateless React/Nginx application
+- Serves static files that don't change per request
+- 2 replicas for high availability and load distribution
+- Easy rollback capabilities for bad deployments
+
+**Service Type: LoadBalancer**
+- Exposes frontend to internet traffic via GCP Load Balancer
+- Automatically provisions external IP address
+- Distributes traffic across frontend replicas
+- Provides the public URL for accessing the application
+
+---
+
+## 2. Method of Exposing Pods to Internet Traffic
+
+### Architecture:
+```
+<userPrompt>
+Provide the fully rewritten file, incorporating the suggested code change. You must produce the complete file.
+</userPrompt>
+````
+This is the code block that represents the suggested code change:
+````markdown
+### Implementation:
+1. **Frontend Service (LoadBalancer)**:
+   - Type: `LoadBalancer`
+   - Automatically provisions GCP External Load Balancer
+   - Gets external IP address: `http://<EXTERNAL-IP>:80`
+   - Users access application via this IP
+   - GKE manages the cloud load balancer infrastructure
+
+2. **Backend Service (ClusterIP)**:
+   - Type: `ClusterIP` (internal only)
+   - Accessible within cluster at `backend-service:5000`
+   - Frontend makes API calls to backend via internal DNS
+   - Not exposed externally for security
+
+3. **MongoDB Service (Headless)**:
+   - Type: `ClusterIP: None` (headless service)
+   - Provides DNS for StatefulSet pods: `mongodb-0.mongodb-service`
+   - Only accessible within cluster
+   - Secure database connection
+
+### Why LoadBalancer over NodePort or Ingress?
+- **LoadBalancer**: Simple, direct exposure with managed cloud load balancer
+- **NodePort**: Requires exposing node IPs and manual load balancing
+- **Ingress**: Overkill for single-service exposure, adds complexity
+- For production, consider Ingress with TLS for multiple services
+
+---
+
+## 3. Persistent Storage Implementation
+
+### Strategy:
+**StatefulSet with Dynamic Volume Provisioning**
+
+### Components:
+1. **volumeClaimTemplates** (in StatefulSet):
+   - Automatically creates a PVC for each pod replica
+   - Template-based approach scales with replicas
+   - Each PVC binds to a unique PersistentVolume
+
+2. **StorageClass**: `standard-rwo`
+   - GKE-provided storage class
+   - Provisions Google Persistent Disk (SSD or Standard)
+   - `ReadWriteOnce` access mode (single node access)
+   - Dynamically provisions volumes on-demand
+
+3. **Volume Mount**:
+   - Path: `/data/db` (MongoDB data directory)
+   - Persists database files, indexes, and logs
+
+### Data Persistence Guarantees:
+- Data survives pod restarts
+- Data survives pod deletions
+- Data survives node failures (volume re-attached to new node)
+- GITData survives cluster upgrades
+- Data deleted only when PVC is manually deleted
+
+### Why Not Use:
+- **emptyDir**: Ephemeral, data lost on pod deletion
+- **hostPath**: Ties pod to specific node, not portable
+- **ConfigMap/Secret**: Not designed for large data storage
+
+### Testing Persistence:
+```bash
+# Add data via application
+# Delete the pod
+kubectl delete pod mongodb-0 -n yolo-app
+# StatefulSet recreates pod with same PVC
+# Verify data still exists
+````
+<userPrompt>
+Provide the fully rewritten file, incorporating the suggested code change. You must produce the complete file.
+</userPrompt>
