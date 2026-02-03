@@ -1,0 +1,6 @@
+---
+- name: Test connection to Vagrant VM
+  hosts: vagrant_vm
+  tasks:
+    - name: Ping VM
+      ansible.builtin.ping:
