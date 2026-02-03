@@ -2,6 +2,7 @@
 
 ## Overview
 A full-stack e-commerce application deployed on Google Kubernetes Engine (GKE), featuring a React frontend, Node.js backend, and MongoDB database with persistent storage.
+The database uses a StatefulSet with PersistentVolumeClaims to ensure data persists even after pod deletion.
 
 ### GKE Cluster
 The application is deployed on Google Kubernetes Engine.
