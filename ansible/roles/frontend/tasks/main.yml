@@ -3,27 +3,6 @@
 # Deploy Frontend Application using Docker
 - name: Deploy Frontend Application with Docker
   block:
-    - name: Ensure project is cloned (dependency on backend role)
-      stat:
-        path: "{{ project_root }}/client"
-      register: client_dir
-
-    - name: Clone application if not present
-      git:
-        repo: "{{ github_repo }}"
-        dest: "{{ project_root }}"
-        version: "{{ github_branch }}"
-        force: yes
-      become_user: "{{ app_user }}"
-      when: not client_dir.stat.exists
-
-    - name: Set ownership of frontend files
-      file:
-        path: "{{ project_root }}/client"
-        owner: "{{ app_user }}"
-        group: "{{ app_group }}"
-        recurse: yes
-
     - name: Ensure Docker network exists
       docker_network:
         name: yolo-network
@@ -31,6 +10,12 @@
 
     - name: Stop and remove existing frontend container
       docker_container:
+        name: yolo-client
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove old frontend image
+      docker_image:
         name: yolo-client
         state: absent
       ignore_errors: yes

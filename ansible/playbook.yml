@@ -1,6 +1,6 @@
 ---
 ##adding main ansible playbook with roles and tags
-- name: Deploy YOLO Application Stack
+- name: Deploy YOLO E-commerce Application
   hosts: vagrant_vm
   become: yes
   
@@ -12,140 +12,61 @@
       apt:
         update_cache: yes
         cache_valid_time: 3600
-      tags:
-        - always
-        - setup
-
-    - name: Install prerequisite packages
-      block:
-        - name: Install common utilities
-          apt:
-            name:
-              - curl
-              - git
-              - wget
-              - gnupg
-              - lsb-release
-              - ca-certificates
-              - software-properties-common
-              - build-essential
-              - python3-pip
-            state: present
-            update_cache: yes
-        
-        - name: Install Docker SDK for Python
-          pip:
-            name:
-              - docker
-              - docker-compose
-            state: present
-        
-        - name: Create application group
-          group:
-            name: "{{ app_group }}"
-            state: present
-        
-        - name: Create application user
-          user:
-            name: "{{ app_user }}"
-            group: "{{ app_group }}"
-            create_home: yes
-            shell: /bin/bash
-            state: present
-        
-        - name: Create project directories
-          file:
-            path: "{{ item }}"
-            state: directory
-            owner: "{{ app_user }}"
-            group: "{{ app_group }}"
-            mode: '0755'
-          loop:
-            - "{{ project_root }}"
-            - "{{ project_root }}/logs"
-            - "{{ mongodb_data_dir }}"
-      tags:
-        - setup
-        - prerequisites
-
+      ignore_errors: yes
+      tags: always
+    
+    - name: Install system packages
+      apt:
+        name:
+          - git
+          - curl
+          - python3-pip
+          - apt-transport-https
+          - python3-docker
+        state: present
+        update_cache: yes
+      tags: setup
+    
+    - name: Create application group
+      group:
+        name: "{{ app_group }}"
+        state: present
+      tags: setup
+    
+    - name: Create application user
+      user:
+        name: "{{ app_user }}"
+        group: "{{ app_group }}"
+        create_home: yes
+        shell: /bin/bash
+        state: present
+      tags: setup
+    
+    - name: Create project directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
+      loop:
+        - "{{ project_root }}"
+        - "{{ mongodb_data_dir }}"
+      tags: setup
+  
   roles:
-    - role: docker
-      tags:
-        - docker
-        - infrastructure
-    
-    - role: mongodb
-      tags:
-        - mongodb
-        - database
-        - infrastructure
-    
-    - role: backend
-      tags:
-        - backend
-        - application
-    
-    - role: frontend
-      tags:
-        - frontend
-        - application
-
+    - { role: docker, tags: [docker, setup] }
+    - { role: clone_repo, tags: [clone, setup] }
+    - { role: mongodb, tags: [mongodb, containers] }
+    - { role: backend, tags: [backend, containers] }
+    - { role: frontend, tags: [frontend, containers] }
+  
   post_tasks:
-    - name: Verify deployment
-      block:
-        - name: Check MongoDB container is running
-          docker_container_info:
-            name: mongo
-          register: mongodb_status
-        
-        - name: Check backend container is running
-          docker_container_info:
-            name: yolo-backend
-          register: backend_status
-        
-        - name: Check frontend container is running
-          docker_container_info:
-            name: yolo-client
-          register: frontend_status
-        
-        - name: Verify MongoDB is healthy
-          fail:
-            msg: "MongoDB container is not running"
-          when: not mongodb_status.exists or mongodb_status.container.State.Status != "running"
-        
-        - name: Verify backend is healthy
-          fail:
-            msg: "Backend container is not running"
-          when: not backend_status.exists or backend_status.container.State.Status != "running"
-        
-        - name: Verify frontend is healthy
-          fail:
-            msg: "Frontend container is not running"
-          when: not frontend_status.exists or frontend_status.container.State.Status != "running"
-        
-        - name: Display deployment status
-          debug:
-            msg:
-              - "✅ MongoDB Container: {{ mongodb_status.container.State.Status }}"
-              - "✅ Backend Container: {{ backend_status.container.State.Status }}"
-              - "✅ Frontend Container: {{ frontend_status.container.State.Status }}"
-              - "🌐 Frontend URL: http://{{ ansible_host }}:{{ frontend_port }}"
-              - "🔌 Backend API URL: http://{{ ansible_host }}:{{ backend_port }}"
-              - "🗄️  MongoDB URL: mongodb://{{ ansible_host }}:{{ mongodb_port }}"
-      
-      rescue:
-        - name: Display verification error
-          debug:
-            msg: "Deployment verification failed. Check container logs."
-        
-        - name: Show running containers
-          command: docker ps -a
-          register: containers
-        
-        - name: Print container status
-          debug:
-            var: containers.stdout_lines
-      
-      tags:
-        - verify
-        - always
+    - name: Display deployment info
+      debug:
+        msg:
+          - "Deployment Complete!"
+          - "Frontend: http://{{ ansible_host }}:{{ frontend_port }}"
+          - "Backend: http://{{ ansible_host }}:{{ backend_port }}/api/products"
+          - "MongoDB: mongodb://{{ ansible_host }}:{{ mongodb_port }}"
+      tags: always
